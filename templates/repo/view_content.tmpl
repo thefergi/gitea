@@ -197,6 +197,15 @@
 .tia-d-value .tia-diff-n{background:#a371f714}.tia-d-value .tia-diff-tag{background:#8957e5}
 .tia-d-unchanged .tia-diff-tag{background:#6e7681}
 .tia-d-added .tia-diff-cell:nth-child(2){background:#1f6feb0a}.tia-d-removed .tia-diff-cell:nth-child(1){background:#f851490a}
+.tia-diff-seg{display:inline-flex;border:1px solid var(--color-secondary);border-radius:6px;overflow:hidden}
+.tia-vm{border:none;background:transparent;padding:4px 12px;font-size:12px;cursor:pointer;color:var(--color-text)}
+.tia-vm.tia-vm-on{background:var(--color-primary);color:#fff}
+.tia-diff-uni{padding:6px 12px;margin:0;border-radius:0;border-left:4px solid transparent}
+.tia-diff-uni.tia-dim{opacity:.5}.tia-diff-uni.tia-strike{text-decoration:line-through;opacity:.65}
+.tia-d-added .tia-diff-uni{background:#e6ffed;border-left-color:#238636}
+.tia-d-removed .tia-diff-uni{background:#ffeef0;border-left-color:#d73a49}
+.tia-d-modified .tia-diff-uni{background:#fff4e0;border-left-color:#dbab09}
+.tia-d-value .tia-diff-uni{background:#f6f0ff;border-left-color:#8957e5}
 #tia-compare-btn{font-size:12px}
 /* in-page ladder pieces (diff), same look as the iframe renderer */
 #tia-diff-panel .tia-ladder,#tia-diff-panel .tia-rung{font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.6}
@@ -472,7 +481,7 @@
 	}
 	function tiaRenderDiff(d){
 		var oldR = parseBlock(d.base), newR = parseBlock(d.head);
-		var hideUnchanged = false, ignoreValues = false;
+		var hideUnchanged = false, ignoreValues = false, viewMode = 'unified';
 		var panel = document.createElement('div'); panel.id = 'tia-diff-panel';
 		var content = document.querySelector('.repo-view-content');
 		function draw(){
@@ -485,17 +494,25 @@
 				counts[cls]++;
 				if (hideUnchanged && (cls === 'unchanged')) continue;
 				var label = {added:'＋ added',removed:'－ removed',modified:'✎ modified',value:'≠ value',unchanged:'= unchanged'}[cls];
-				rows.push('<div class="tia-diff-row tia-d-' + cls + '"><div class="tia-diff-n">Network ' + (i+1) + ' <span class="tia-diff-tag">' + label + '</span></div><div class="tia-diff-grid"><div class="tia-diff-cell"><div class="tia-diff-side">previous</div>' + renderRung(ro) + '</div><div class="tia-diff-cell"><div class="tia-diff-side">current</div>' + renderRung(rn) + '</div></div></div>');
+				if (viewMode === 'unified'){
+					var shown = cls === 'removed' ? ro : rn; // removed rungs show the old (ghost); else current
+					rows.push('<div class="tia-diff-row tia-d-' + cls + '"><div class="tia-diff-n">Network ' + (i+1) + ' <span class="tia-diff-tag">' + label + '</span></div><div class="tia-diff-uni' + (cls==='unchanged'?' tia-dim':'') + (cls==='removed'?' tia-strike':'') + '">' + renderRung(shown) + '</div></div>');
+				} else {
+					rows.push('<div class="tia-diff-row tia-d-' + cls + '"><div class="tia-diff-n">Network ' + (i+1) + ' <span class="tia-diff-tag">' + label + '</span></div><div class="tia-diff-grid"><div class="tia-diff-cell"><div class="tia-diff-side">previous</div>' + renderRung(ro) + '</div><div class="tia-diff-cell"><div class="tia-diff-side">current</div>' + renderRung(rn) + '</div></div></div>');
+				}
 			}
 			var summary = Object.keys(counts).filter(function(k){return counts[k];}).map(function(k){return counts[k] + ' ' + k;}).join(' · ');
 			panel.innerHTML =
 				'<div class="tia-diff-head"><b>Ladder diff</b> <span class="tia-diff-path">' + esc(d.fpath) + '</span>' +
+				'<div class="tia-diff-seg"><button type="button" id="tia-vm-unified" class="tia-vm' + (viewMode==='unified'?' tia-vm-on':'') + '">Unified</button><button type="button" id="tia-vm-split" class="tia-vm' + (viewMode==='split'?' tia-vm-on':'') + '">Split</button></div>' +
 				'<label class="tia-diff-flt"><input type="checkbox" id="tia-fl-hide"' + (hideUnchanged?' checked':'') + '> Hide unchanged rungs</label>' +
 				'<label class="tia-diff-flt"><input type="checkbox" id="tia-fl-val"' + (ignoreValues?' checked':'') + '> Ignore value changes</label>' +
 				'<span class="tia-diff-sum">' + esc(summary) + '</span>' +
 				'<button class="ui compact basic button" id="tia-diff-close" type="button">✕ Close</button></div>' +
 				'<div class="tia-diff-oldsha">base ' + esc(d.prev.slice(0,7)) + ' → head ' + esc(d.ref) + '</div>' +
 				(rows.length ? rows.join('') : '<div class="tia-diff-empty">No differences' + (hideUnchanged?' (all rungs unchanged)':'') + '</div>');
+			document.getElementById('tia-vm-unified').onclick = function(){ viewMode='unified'; draw(); };
+			document.getElementById('tia-vm-split').onclick = function(){ viewMode='split'; draw(); };
 			document.getElementById('tia-fl-hide').onchange = function(){ hideUnchanged = this.checked; draw(); };
 			document.getElementById('tia-fl-val').onchange = function(){ ignoreValues = this.checked; draw(); };
 			document.getElementById('tia-diff-close').onclick = function(){ panel.remove(); var v = renderIframe(); if (v) v.style.display=''; var b2 = document.getElementById('tia-compare-btn'); if (b2) b2.disabled = false; };
