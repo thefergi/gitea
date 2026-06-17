@@ -176,6 +176,38 @@
 #tia-sidebar details>summary:before{content:"▸";color:var(--color-text-light-2);font-size:10px;display:inline-block;transition:transform .1s}
 #tia-sidebar details[open]>summary:before{transform:rotate(90deg)}
 #tia-sidebar .tia-sb-num{font-size:10px;color:var(--color-text-light-2);margin-left:auto;padding-left:6px}
+/* Stage B: ladder diff panel + in-page ladder pieces (renderer CSS lives in its iframe) */
+#tia-diff-panel{font-family:var(--fonts-regular,Segoe UI,Roboto,sans-serif);font-size:13px;color:var(--color-text);margin:8px 0 14px;border:1px solid var(--color-secondary);border-radius:8px;background:var(--color-box-body);padding:10px 12px}
+.tia-diff-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.tia-diff-path{font-family:ui-monospace,Consolas,monospace;color:var(--color-text-light-2);font-size:12px}
+.tia-diff-flt{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:400;padding:2px 8px;border:1px solid var(--color-secondary);border-radius:6px;cursor:pointer}
+.tia-diff-sum{margin-left:auto;font-size:12px;color:var(--color-text-light-2)}
+.tia-diff-oldsha{font-size:11px;color:var(--color-text-light-2);font-family:ui-monospace,Consolas,monospace;margin-bottom:8px}
+.tia-diff-row{border:1px solid var(--color-secondary);border-radius:6px;margin:6px 0;overflow:hidden}
+.tia-diff-n{padding:5px 10px;font-weight:600;background:var(--color-secondary-alpha-30);display:flex;align-items:center;gap:8px}
+.tia-diff-tag{font-size:11px;font-weight:700;padding:1px 7px;border-radius:4px;color:#fff}
+.tia-diff-grid{display:grid;grid-template-columns:1fr 1fr}
+.tia-diff-cell{padding:8px 10px;border-left:1px solid var(--color-secondary-alpha-40);min-height:34px}
+.tia-diff-cell:first-child{border-left:none}
+.tia-diff-side{font-size:10px;text-transform:uppercase;color:var(--color-text-light-2);margin-bottom:4px}
+.tia-diff-empty{padding:14px;color:var(--color-text-light-2);text-align:center}
+.tia-d-added{border-color:#3fb950}.tia-d-added .tia-diff-n{background:#1f6feb0d}.tia-d-added .tia-diff-tag{background:#238636}
+.tia-d-removed .tia-diff-n{background:#f8514910}.tia-d-removed .tia-diff-tag{background:#d73a49}
+.tia-d-modified .tia-diff-n{background:#d299221a}.tia-d-modified .tia-diff-tag{background:#dbab09}
+.tia-d-value .tia-diff-n{background:#a371f714}.tia-d-value .tia-diff-tag{background:#8957e5}
+.tia-d-unchanged .tia-diff-tag{background:#6e7681}
+.tia-d-added .tia-diff-cell:nth-child(2){background:#1f6feb0a}.tia-d-removed .tia-diff-cell:nth-child(1){background:#f851490a}
+#tia-compare-btn{font-size:12px}
+/* in-page ladder pieces (diff), same look as the iframe renderer */
+#tia-diff-panel .tia-ladder,#tia-diff-panel .tia-rung{font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.6}
+#tia-diff-panel .tia-rail{color:#888;padding:0 3px}#tia-diff-panel .tia-wire{color:#888}
+#tia-diff-panel .tia-series{display:inline-flex;align-items:center}
+#tia-diff-panel .tia-parallel{display:inline-flex;flex-direction:column;border-left:2px solid #888;border-right:2px solid #888;margin:0 4px}
+#tia-diff-panel .tia-parallel .tia-series{padding:2px 6px}
+#tia-diff-panel .tia-ct{display:inline-flex;align-items:center;border:1px solid #666;border-radius:4px;background:#fff;padding:2px 8px;margin:0 3px}
+#tia-diff-panel .tia-bar{color:#999;margin:0 2px}
+#tia-diff-panel .tia-coil{border:1px solid #070;color:#050;background:#efe;border-radius:10px;padding:2px 10px;margin-left:8px;font-weight:bold}
+#tia-diff-panel .tia-empty{color:var(--color-text-light-2);font-style:italic}
 </style>
 <script nonce="{{ctx.CspScriptNonce}}">
 (function(){
@@ -289,5 +321,179 @@
 		sb.innerHTML = h.join('');
 		container.appendChild(sb);
 	});
+
+	/* Stage B: ladder diff (compare two commits of a block).
+	   Self-contained port of the tia-ladder renderer's topology decoder so the
+	   diff can fingerprint each network and render old|new side by side. */
+	function ln(el){ return (el && el.tagName ? el.tagName : '').replace(/^.*:/, ''); }
+	function accessOperand(access){
+		var s = '', comps = [];
+		var all = access.getElementsByTagName('*');
+		for (var i = 0; i < all.length; i++){ var e = all[i]; if (ln(e) === 'Component' && e.parentNode && ln(e.parentNode) === 'Symbol') comps.push(e); }
+		for (var j = 0; j < comps.length; j++){ var n = comps[j].getAttribute('Name'); if (n){ s += s ? '.' + n : n; } }
+		if (s) return s;
+		var cv = null;
+		for (var k = 0; k < all.length; k++){ if (ln(all[k]) === 'ConstantValue'){ cv = all[k]; break; } }
+		return (cv && cv.textContent && cv.textContent.trim()) ? cv.textContent.trim() : null;
+	}
+	function buildRung(flg){
+		var partsEl = null; for (var i = 0; i < flg.children.length; i++){ if (ln(flg.children[i]) === 'Parts'){ partsEl = flg.children[i]; break; } }
+		if (!partsEl) return null;
+		var access = {};
+		for (var a = 0; a < partsEl.children.length; a++){ var ae = partsEl.children[a]; if (ln(ae) !== 'Access') continue; var uid = ae.getAttribute('UId'); var op = accessOperand(ae); if (uid && op) access[uid] = op; }
+		var partName = {}, partNeg = {};
+		for (var p = 0; p < partsEl.children.length; p++){ var pe = partsEl.children[p]; if (ln(pe) !== 'Part') continue; var pu = pe.getAttribute('UId'); if (!pu) continue; partName[pu] = (pe.getAttribute('Name') || '').trim(); var neg = null; for (var c = 0; c < pe.children.length; c++){ if (ln(pe.children[c]) === 'Negated'){ neg = pe.children[c]; break; } } var nv = neg && neg.getAttribute('Name'); partNeg[pu] = !!(nv && nv !== 'false'); }
+		var partNodes = {}, nodeAccess = {}, powerrail = {}, nodeGen = 0;
+		var wiresEl = null; for (var w = 0; w < flg.children.length; w++){ if (ln(flg.children[w]) === 'Wires'){ wiresEl = flg.children[w]; break; } }
+		if (!wiresEl) return null;
+		for (var wi = 0; wi < wiresEl.children.length; wi++){
+			var we = wiresEl.children[wi]; if (ln(we) !== 'Wire') continue;
+			var nid = we.getAttribute('UId') || ('N' + (nodeGen++));
+			for (var ci = 0; ci < we.children.length; ci++){ if (ln(we.children[ci]) === 'Powerrail'){ powerrail[nid] = true; break; } }
+			for (var nci = 0; nci < we.children.length; nci++){ var nc = we.children[nci]; if (ln(nc) === 'NameCon'){ var ppu = nc.getAttribute('UId'); if (ppu){ (partNodes[ppu] = partNodes[ppu] || {}); partNodes[ppu][nid] = true; } } }
+			var accs = [];
+			for (var ii = 0; ii < we.children.length; ii++){ var ic = we.children[ii]; if (ln(ic) === 'IdentCon'){ var au = ic.getAttribute('UId'); if (au) accs.push(au); } }
+			if (accs.length) nodeAccess[nid] = accs;
+		}
+		function partOperand(pu){ var nodes = partNodes[pu]; if (!nodes) return null; for (var n in nodes){ var accs = nodeAccess[n]; if (accs){ for (var ai = 0; ai < accs.length; ai++){ if (access[accs[ai]]) return access[accs[ai]]; } } } return null; }
+		var rlo = {};
+		for (var pn in powerrail){ rlo[pn] = null; }
+		function seriesAdd(parent, node){ if (parent === null || parent === undefined) return node; if (parent && parent.type === 'series'){ parent.items.push(node); return parent; } return {type:'series', items:[parent, node]}; }
+		function parallelOf(nodes){ var f = []; for (var i = 0; i < nodes.length; i++){ if (nodes[i] !== null && nodes[i] !== undefined) f.push(nodes[i]); } return f.length === 1 ? f[0] : {type:'parallel', branches:f}; }
+		var changed = true, guard = 0;
+		while (changed && guard++ < 64){
+			changed = false;
+			for (var pu2 in partName){
+				if (partName[pu2] !== 'Contact' || !partNodes[pu2]) continue;
+				var power = []; for (var n in partNodes[pu2]){ if (!nodeAccess[n]) power.push(n); }
+				if (power.length !== 2) continue;
+				var c = {type:'contact', operand: partOperand(pu2) || '?', negated: !!partNeg[pu2]};
+				var A = power[0], B = power[1];
+				if (rlo[A] !== undefined && rlo[B] === undefined){ rlo[B] = seriesAdd(rlo[A], c); changed = true; }
+				else if (rlo[B] !== undefined && rlo[A] === undefined){ rlo[A] = seriesAdd(rlo[B], c); changed = true; }
+			}
+			for (var pu3 in partName){
+				if (partName[pu3] !== 'O' || !partNodes[pu3]) continue;
+				var nodes = []; for (var n in partNodes[pu3]){ nodes.push(n); }
+				var known = [], unknown = [];
+				for (var i = 0; i < nodes.length; i++){ if (rlo[nodes[i]] !== undefined){ if (rlo[nodes[i]] !== null) known.push(rlo[nodes[i]]); } else unknown.push(nodes[i]); }
+				if (unknown.length === 1 && known.length >= 1){ rlo[unknown[0]] = parallelOf(known); changed = true; }
+			}
+		}
+		for (var pu4 in partName){
+			if (partName[pu4] !== 'Coil' || !partNodes[pu4]) continue;
+			var cpower = []; for (var n in partNodes[pu4]){ if (!nodeAccess[n]) cpower.push(n); }
+			if (cpower.length !== 1) continue;
+			return {coil: partOperand(pu4) || '?', negatedCoil: !!partNeg[pu4], tree: rlo[cpower[0]] !== undefined ? rlo[cpower[0]] : null};
+		}
+		return null;
+	}
+	function renderNode(n){
+		if (!n) return '';
+		if (n.type === 'contact'){ var neg = n.negated ? '/' : ''; return '<span class="tia-ct"><span class="tia-bar">|</span>' + neg + esc(n.operand) + '<span class="tia-bar">|</span></span>'; }
+		if (n.type === 'series'){ return '<span class="tia-series">' + n.items.map(renderNode).join('<span class="tia-wire">─</span>') + '</span>'; }
+		if (n.type === 'parallel'){ return '<span class="tia-parallel">' + n.branches.map(function(b){ return '<span class="tia-series">' + renderNode(b) + '</span>'; }).join('') + '</span>'; }
+		return '';
+	}
+	function renderRung(r){ if (!r) return '<span class="tia-empty">(empty network)</span>'; var neg = r.negatedCoil ? '/' : ''; return '<span class="tia-rail">║</span><span class="tia-wire">─</span>' + renderNode(r.tree) + '<span class="tia-wire">─</span><span class="tia-coil">(' + neg + esc(r.coil) + ')</span>'; }
+	function parseBlock(xml){
+		var doc = new DOMParser().parseFromString(xml, 'text/xml');
+		var cus = [], all = doc.getElementsByTagName('*');
+		for (var i = 0; i < all.length; i++){ if (ln(all[i]) === 'SW.Blocks.CompileUnit') cus.push(all[i]); }
+		var rungs = [];
+		cus.forEach(function(cu, idx){
+			var flg = null, flgs = cu.getElementsByTagName('*');
+			for (var k = 0; k < flgs.length; k++){ if (ln(flgs[k]) === 'FlgNet'){ flg = flgs[k]; break; } }
+			rungs.push({index: idx + 1, rung: flg ? buildRung(flg) : null, hasFlg: !!flg});
+		});
+		return rungs;
+	}
+	function fp(rung, ignoreValues){ if (!rung) return '~empty~'; var s = JSON.stringify(rung); if (ignoreValues){ s = s.replace(/"operand":"[^"]*"/g, '"operand":"_"').replace(/"coil":"[^"]*"/g, '"coil":"_"'); } return s; }
+	function classify(ro, rn, ignoreValues){
+		if (!ro && rn) return 'added';
+		if (ro && !rn) return 'removed';
+		if (fp(ro, false) === fp(rn, false)) return 'unchanged';
+		var sameStruct = fp(ro, true) === fp(rn, true);
+		if (sameStruct) return ignoreValues ? 'unchanged' : 'value'; // value-only change collapses when ignored
+		return 'modified';
+	}
+
+	function renderIframe(){ return document.querySelector('iframe[src*="/render/"]'); }
+	window.__tiaSetupDiff = function(){
+		function inject(){
+			var content = document.querySelector('.repo-view-content');
+			if (!content) return false;
+			if (content.querySelector('#tia-compare-btn')) return true;
+			if (!renderIframe()) return false; // wait until the rendered block iframe exists
+			var btn = document.createElement('button');
+			btn.id = 'tia-compare-btn';
+			btn.className = 'ui compact basic button';
+			btn.type = 'button';
+			btn.innerHTML = '⇄ Compare with previous commit';
+			btn.style.marginLeft = '6px';
+			btn.addEventListener('click', tiaRunDiff);
+			var bar = document.createElement('div'); bar.style.padding = '6px 0'; bar.appendChild(btn);
+			content.insertBefore(bar, content.firstChild);
+			return true;
+		}
+		if (inject()) return;
+		var obs = new MutationObserver(function(){ if (inject()) obs.disconnect(); });
+		obs.observe(document.body, {childList: true, subtree: true});
+		setTimeout(function(){ obs.disconnect(); }, 10000);
+	};
+	function tiaRunDiff(){
+		var btn = document.getElementById('tia-compare-btn'); if (btn) btn.disabled = true;
+		var parts = location.pathname.split('/src/')[1].split('/'); // [refType, ref, ...path]
+		var ref = parts[1]; var fpath = parts.slice(2).join('/');
+		var ownerRepo = location.pathname.split('/src/')[0]; // /owner/repo
+		fetch('/api/v1/repos' + ownerRepo + '/commits?sha=' + encodeURIComponent(ref) + '&path=' + encodeURIComponent(fpath) + '&page=1&limit=3')
+			.then(function(r){ return r.ok ? r.json() : []; })
+			.then(function(list){ if (!list.length) throw new Error('no commits for path'); return list.length > 1 ? list[1].sha : (list[0].sha + '^'); })
+			.catch(function(e){ throw e; })
+			.then(function(prev){
+				var headUrl = ownerRepo + '/raw/' + encodeURIComponent(ref) + '/' + fpath;
+				var baseUrl = ownerRepo + '/raw/' + encodeURIComponent(prev) + '/' + fpath;
+				return Promise.all([fetch(headUrl).then(function(r){return r.text();}), fetch(baseUrl).then(function(r){return r.text();})]).then(function(t){ return {head:t[0], base:t[1], prev:prev, ref:ref, fpath:fpath, ownerRepo:ownerRepo}; });
+			})
+			.then(function(d){ tiaRenderDiff(d); })
+			.catch(function(e){ if (btn) btn.disabled = false; alert('Compare failed: ' + (e && e.message ? e.message : e)); });
+	}
+	function tiaRenderDiff(d){
+		var oldR = parseBlock(d.base), newR = parseBlock(d.head);
+		var hideUnchanged = false, ignoreValues = false;
+		var panel = document.createElement('div'); panel.id = 'tia-diff-panel';
+		var content = document.querySelector('.repo-view-content');
+		function draw(){
+			var n = Math.max(oldR.length, newR.length);
+			var rows = [];
+			var counts = {added:0,removed:0,modified:0,value:0,unchanged:0};
+			for (var i = 0; i < n; i++){
+				var ro = oldR[i] ? oldR[i].rung : null, rn = newR[i] ? newR[i].rung : null;
+				var cls = classify(ro, rn, ignoreValues);
+				counts[cls]++;
+				if (hideUnchanged && (cls === 'unchanged')) continue;
+				var label = {added:'＋ added',removed:'－ removed',modified:'✎ modified',value:'≠ value',unchanged:'= unchanged'}[cls];
+				rows.push('<div class="tia-diff-row tia-d-' + cls + '"><div class="tia-diff-n">Network ' + (i+1) + ' <span class="tia-diff-tag">' + label + '</span></div><div class="tia-diff-grid"><div class="tia-diff-cell"><div class="tia-diff-side">previous</div>' + renderRung(ro) + '</div><div class="tia-diff-cell"><div class="tia-diff-side">current</div>' + renderRung(rn) + '</div></div></div>');
+			}
+			var summary = Object.keys(counts).filter(function(k){return counts[k];}).map(function(k){return counts[k] + ' ' + k;}).join(' · ');
+			panel.innerHTML =
+				'<div class="tia-diff-head"><b>Ladder diff</b> <span class="tia-diff-path">' + esc(d.fpath) + '</span>' +
+				'<label class="tia-diff-flt"><input type="checkbox" id="tia-fl-hide"' + (hideUnchanged?' checked':'') + '> Hide unchanged rungs</label>' +
+				'<label class="tia-diff-flt"><input type="checkbox" id="tia-fl-val"' + (ignoreValues?' checked':'') + '> Ignore value changes</label>' +
+				'<span class="tia-diff-sum">' + esc(summary) + '</span>' +
+				'<button class="ui compact basic button" id="tia-diff-close" type="button">✕ Close</button></div>' +
+				'<div class="tia-diff-oldsha">base ' + esc(d.prev.slice(0,7)) + ' → head ' + esc(d.ref) + '</div>' +
+				(rows.length ? rows.join('') : '<div class="tia-diff-empty">No differences' + (hideUnchanged?' (all rungs unchanged)':'') + '</div>');
+			document.getElementById('tia-fl-hide').onchange = function(){ hideUnchanged = this.checked; draw(); };
+			document.getElementById('tia-fl-val').onchange = function(){ ignoreValues = this.checked; draw(); };
+			document.getElementById('tia-diff-close').onclick = function(){ panel.remove(); var v = renderIframe(); if (v) v.style.display=''; var b2 = document.getElementById('tia-compare-btn'); if (b2) b2.disabled = false; };
+		}
+		var v = renderIframe(); if (v) v.style.display = 'none';
+		var prevPanel = document.getElementById('tia-diff-panel'); if (prevPanel) prevPanel.remove();
+		content.insertBefore(panel, content.firstChild);
+		draw();
+	}
+	/* wire the Compare button once project.json is confirmed (TIA repo) */
+	window.__tiaGetProject.then(function(proj){ if (proj) window.__tiaSetupDiff(); });
 })();
 </script>
