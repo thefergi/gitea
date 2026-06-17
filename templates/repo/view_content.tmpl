@@ -243,7 +243,10 @@
 .tia-src{font-family:ui-monospace,Consolas,"Cascadia Code",monospace;font-size:12.5px;line-height:1.55;background:var(--color-code-bg,#f6f8fa);border:1px solid var(--color-secondary);border-radius:6px;padding:10px 14px;overflow:auto;white-space:pre;max-height:72vh;color:var(--color-code-text,#1f2328)}
 .tia-kw{color:#cf222e;font-weight:600}.tia-cm{color:#6e7781;font-style:italic}.tia-str{color:#0a3069}
 /* Archive-backed SPA (repo = only a .zap18 in main) */
-#tia-spa{display:flex;border:1px solid var(--color-secondary);border-radius:8px;overflow:hidden;background:var(--color-box-body);margin:12px 0;font-family:var(--fonts-regular,Segoe UI,Roboto,sans-serif);min-height:62vh}
+#tia-spa{border:1px solid var(--color-secondary);border-radius:8px;overflow:hidden;background:var(--color-box-body);margin:12px 0;font-family:var(--fonts-regular,Segoe UI,Roboto,sans-serif)}
+.tia-spa-source{padding:8px 14px;background:var(--color-secondary-alpha-30);border-bottom:1px solid var(--color-secondary);font-size:13px;color:var(--color-text-light-2)}
+.tia-spa-source b{color:var(--color-text)}
+#tia-spa-body{display:flex;min-height:60vh}
 #tia-spa-nav{width:280px;flex:0 0 280px;border-right:1px solid var(--color-secondary);overflow:auto;max-height:80vh;font-size:13px;padding:4px 0 12px}
 #tia-spa-main{flex:1;padding:14px 18px;overflow:auto;max-height:80vh}
 .tia-spa-empty{color:var(--color-text-light-2);padding:24px;display:flex;align-items:center;gap:8px}
@@ -702,13 +705,16 @@
 
 	function tiaStartSpa(proj){
 		window.__tiaProj = proj;
-		var table = document.getElementById('repo-files-table'); if (table) table.style.display = 'none';
+		// Keep the file list visible: `main` holds ONLY the .zap18 archive, which is the
+		// source the whole project is rendered from — the user should see it.
 		var fs = document.querySelector('.repo-file-search-container'); if (fs) fs.style.display = 'none';
-		var cp = document.querySelector('.repo-button-row .repo-clone-panel'); if (cp) cp.parentElement.style.display = 'none';
 		var host = document.querySelector('.repo-home-filelist') || document.querySelector('.repo-view-content') || document.querySelector('.ui.container');
 		var old = document.getElementById('tia-spa'); if (old) old.remove();
+		// surface the source archive name as a banner above the viewer
+		var zapEl = document.querySelector('#repo-files-table .entry-name, #repo-files-table a.entry-name');
+		var zapName = (zapEl && zapEl.textContent.trim()) || (proj.project || 'project') + '.zap18';
 		var spa = document.createElement('div'); spa.id = 'tia-spa';
-		spa.innerHTML = '<div id="tia-spa-nav">' + tiaSpaNav(proj) + '</div><div id="tia-spa-main"><div class="tia-spa-empty">' + ico('project') + ' Select a block, tag table, or data type on the left.</div></div>';
+		spa.innerHTML = '<div class="tia-spa-source">📦 ' + esc(proj.project || 'TIA Project') + ' — rendered from archive <b>' + esc(zapName) + '</b></div><div id="tia-spa-body"><div id="tia-spa-nav">' + tiaSpaNav(proj) + '</div><div id="tia-spa-main"><div class="tia-spa-empty">' + ico('project') + ' Select a block, tag table, or data type on the left.</div></div></div>';
 		host.appendChild(spa);
 		spa.addEventListener('click', function(e){
 			var n = e.target.closest('[data-tia]'); if (!n) return;
