@@ -176,6 +176,17 @@
 #tia-sidebar details>summary:before{content:"▸";color:var(--color-text-light-2);font-size:10px;display:inline-block;transition:transform .1s}
 #tia-sidebar details[open]>summary:before{transform:rotate(90deg)}
 #tia-sidebar .tia-sb-num{font-size:10px;color:var(--color-text-light-2);margin-left:auto;padding-left:6px}
+#tia-sidebar .tia-sb-nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* TIA-style SVG icons (replace emoji/clunky badges) */
+.tia-ic{display:inline-flex;width:16px;height:16px;flex:0 0 auto;align-self:center;color:var(--color-text-light-2);vertical-align:middle}
+.tia-ic .tia-svg{width:100%;height:100%;display:block}
+.tia-ic-fc{color:#1f6feb}.tia-ic-fb{color:#8957e5}.tia-ic-ob{color:#238636}.tia-ic-db{color:#db6d28}.tia-ic-udt{color:#6e7681}.tia-ic-scr{color:#d6399b}
+.tia-proj-head .tia-ic{width:24px;height:24px;color:var(--color-primary)}
+.tia-plc>h3 .tia-ic{color:#2da44e}
+.tia-plc>h3:before,#tia-sidebar .tia-sb-proj:before{content:none!important}
+.tia-grp-h{display:flex;align-items:center;gap:6px}
+.tia-tagtable{display:inline-flex!important;align-items:center;gap:6px}
+.tia-list a .tia-ic{margin-right:2px}
 /* Stage B: ladder diff panel + in-page ladder pieces (renderer CSS lives in its iframe) */
 #tia-diff-panel{font-family:var(--fonts-regular,Segoe UI,Roboto,sans-serif);font-size:13px;color:var(--color-text);margin:8px 0 14px;border:1px solid var(--color-secondary);border-radius:8px;background:var(--color-box-body);padding:10px 12px}
 .tia-diff-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:4px}
@@ -241,6 +252,28 @@
 	var fileUrl = function(){ var p = Array.prototype.slice.call(arguments); return repoLink + '/src/' + ref + '/' + p.map(seg).join('/'); };
 	var bc = function(ty){ ty=String(ty||'').toUpperCase(); if(ty.indexOf('FB')>=0)return'fb'; if(ty.indexOf('FC')>=0)return'fc'; if(ty.indexOf('DB')>=0)return'db'; if(ty.indexOf('OB')>=0)return'ob'; return ''; };
 	var shortType = function(ty){ ty=String(ty||'').toUpperCase(); if(ty.indexOf('INSTANCE')>=0)return'IDB'; if(ty.indexOf('GLOBAL')>=0)return'DB'; if(ty.indexOf('FB')>=0)return'FB'; if(ty.indexOf('FC')>=0)return'FC'; if(ty.indexOf('OB')>=0)return'OB'; return ty.slice(0,3)||'?'; };
+	var SVG = {
+		project: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 14V7l3 2V7l3 2V7l3 2V7l3 2v5z"/><path d="M2 14h12"/></svg>',
+		plc: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3.5" y="4.5" width="9" height="7" rx="1"/><path d="M6 4.5V3M10 4.5V3M6 13v-1.5M10 13v-1.5M3.5 7H2M3.5 9H2M12.5 7H14M12.5 9H14"/><rect x="6.5" y="7" width="3" height="2" rx=".4" fill="currentColor" stroke="none"/></svg>',
+		hmi: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3" width="12" height="8" rx="1"/><path d="M6 13.5h4M8 11v2.5"/></svg>',
+		folder: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 5a1 1 0 0 1 1-1h2.6l1.4 1.4H13a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/></svg>',
+		block: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="3" y="4" width="10" height="8" rx="1"/><path d="M3 7.5h10M6 4V2.6M10 4V2.6"/></svg>',
+		db: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><ellipse cx="8" cy="4" rx="4.2" ry="1.6"/><path d="M3.8 4v8c0 .9 1.9 1.6 4.2 1.6s4.2-.7 4.2-1.6V4"/></svg>',
+		tag: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2.5 8.5l5-5H12v4.5l-5 5z"/><circle cx="9.5" cy="6.5" r="1"/></svg>',
+		udt: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M5.5 3c-2.5 0-2.5 10 0 10M10.5 3c2.5 0 2.5 10 0 10"/><rect x="6" y="6" width="4" height="4" rx=".5"/></svg>',
+		screen: '<svg class="tia-svg" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="3" width="12" height="9" rx="1"/><path d="M2 6h12"/></svg>'
+	};
+	function ico(name, colorClass){ return '<span class="tia-ic' + (colorClass ? ' tia-ic-' + colorClass : '') + '">' + SVG[name] + '</span>'; }
+	function blockIcon(type){ var isDb = /DB/i.test(String(type || '')); return ico(isDb ? 'db' : 'block', bc(type)); }
+	var TIA_LABELS = {Blocks: 'Program blocks', TagTables: 'Tag tables', Types: 'Data types', Screens: 'Screens'};
+	function tiaCleanBreadcrumb(){
+		var el = document.querySelector('.repo-view-content .breadcrumb, .breadcrumb'); if (!el) return;
+		el.querySelectorAll('.section').forEach(function(s){
+			var t = (s.textContent || '').trim();
+			if (TIA_LABELS[t]) s.textContent = TIA_LABELS[t];
+			else if (/\.xml$/i.test(t)) s.textContent = t.replace(/\.xml$/i, '');
+		});
+	}
 
 	window.__tiaGetProject = window.__tiaGetProject || fetch(repoLink + '/raw/' + ref + '/project.json', {headers:{'Accept':'application/json'}}).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
 
@@ -255,7 +288,7 @@
 		mount.innerHTML = navHTML(proj);
 	});
 	function navHTML(proj){
-		var h = ['<div class="tia-proj-head"><span class="tia-proj-title">' + esc(proj.project || 'TIA Project') + '</span>'];
+		var h = ['<div class="tia-proj-head">' + ico('project') + '<span class="tia-proj-title">' + esc(proj.project || 'TIA Project') + '</span>'];
 		if(proj.generated){ h.push('<span class="tia-proj-gen">generated ' + esc(String(proj.generated).replace('T',' ').replace(/\.\d+.*$/,'')) + '</span>'); }
 		h.push('</div>');
 		(proj.plcs || []).forEach(function(plc){ h.push(plcSection(plc)); });
@@ -263,30 +296,30 @@
 		return h.join('');
 	}
 	function plcSection(plc){
-		var h = ['<section class="tia-plc"><h3>' + esc(plc.name) + '</h3>'];
+		var h = ['<section class="tia-plc"><h3>' + ico('plc') + esc(plc.name) + '</h3>'];
 		var blocks = (plc.blocks || []).slice().sort(function(a,b){ return (a.number||0)-(b.number||0) || String(a.name).localeCompare(String(b.name)); });
 		if(blocks.length){
-			h.push('<div class="tia-grp"><div class="tia-grp-h">Program blocks <span class="tia-cnt">' + blocks.length + '</span></div><ul class="tia-list">');
-			blocks.forEach(function(b){ h.push('<li><a href="' + fileUrl(plc.name,'Blocks',b.name+'.xml') + '"><span class="tia-badge tia-b-' + bc(b.type) + '">' + esc(b.type||'') + '</span><span class="tia-nm">' + esc(b.name) + '</span>' + (b.number!=null?'<span class="tia-num">#' + esc(b.number) + '</span>':'') + '</a></li>'); });
+			h.push('<div class="tia-grp"><div class="tia-grp-h">' + ico('folder') + 'Program blocks <span class="tia-cnt">' + blocks.length + '</span></div><ul class="tia-list">');
+			blocks.forEach(function(b){ h.push('<li><a href="' + fileUrl(plc.name,'Blocks',b.name+'.xml') + '">' + blockIcon(b.type) + '<span class="tia-nm">' + esc(b.name) + '</span>' + (b.number!=null?'<span class="tia-num">#' + esc(b.number) + '</span>':'') + '</a></li>'); });
 			h.push('</ul></div>');
 		}
 		var types = plc.types || [];
 		if(types.length){
-			h.push('<div class="tia-grp"><div class="tia-grp-h">Data types <span class="tia-cnt">' + types.length + '</span></div><ul class="tia-list">');
-			types.forEach(function(t){ var tn=(typeof t==='string')?t:t.name; h.push('<li><a href="' + fileUrl(plc.name,'Types',tn+'.xml') + '"><span class="tia-badge tia-b-udt">UDT</span><span class="tia-nm">' + esc(tn) + '</span></a></li>'); });
+			h.push('<div class="tia-grp"><div class="tia-grp-h">' + ico('folder') + 'Data types <span class="tia-cnt">' + types.length + '</span></div><ul class="tia-list">');
+			types.forEach(function(t){ var tn=(typeof t==='string')?t:t.name; h.push('<li><a href="' + fileUrl(plc.name,'Types',tn+'.xml') + '">' + ico('udt','udt') + '<span class="tia-nm">' + esc(tn) + '</span></a></li>'); });
 			h.push('</ul></div>');
 		}
 		var tags = plc.tags || [];
-		if(tags.length){ h.push('<div class="tia-grp"><div class="tia-grp-h">Tags <span class="tia-cnt">' + tags.length + '</span></div><a class="tia-tagtable" href="' + fileUrl(plc.name,'TagTables','Default tag table.xml') + '">Default tag table</a></div>'); }
+		if(tags.length){ h.push('<div class="tia-grp"><div class="tia-grp-h">' + ico('folder') + 'Tags <span class="tia-cnt">' + tags.length + '</span></div><a class="tia-tagtable" href="' + fileUrl(plc.name,'TagTables','Default tag table.xml') + '">' + ico('tag') + 'Default tag table</a></div>'); }
 		h.push('</section>');
 		return h.join('');
 	}
 	function hmiSection(hmi){
-		var h = ['<section class="tia-plc"><h3>' + esc(hmi.name) + '</h3>'];
+		var h = ['<section class="tia-plc"><h3>' + ico('hmi') + esc(hmi.name) + '</h3>'];
 		var scr = hmi.screens || [];
 		if(scr.length){
-			h.push('<div class="tia-grp"><div class="tia-grp-h">Screens <span class="tia-cnt">' + scr.length + '</span></div><ul class="tia-list">');
-			scr.forEach(function(s){ var sn=(typeof s==='string')?s:s.name; h.push('<li><a href="' + fileUrl(hmi.name,'Screens',sn+'.xml') + '"><span class="tia-badge tia-b-scr">SCR</span><span class="tia-nm">' + esc(sn) + '</span></a></li>'); });
+			h.push('<div class="tia-grp"><div class="tia-grp-h">' + ico('folder') + 'Screens <span class="tia-cnt">' + scr.length + '</span></div><ul class="tia-list">');
+			scr.forEach(function(s){ var sn=(typeof s==='string')?s:s.name; h.push('<li><a href="' + fileUrl(hmi.name,'Screens',sn+'.xml') + '">' + ico('screen','scr') + '<span class="tia-nm">' + esc(sn) + '</span></a></li>'); });
 			h.push('</ul></div>');
 		}
 		h.push('</section>');
@@ -309,31 +342,31 @@
 		slot.style.display = 'none';
 		var prev = container.querySelector('#tia-sidebar'); if(prev) prev.remove();
 		var active = decodeURIComponent(location.pathname.replace(/^.*\/src\/[^/]+\/[^/]+\//, ''));
-		var h = ['<div class="tia-sb-proj">' + esc(proj.project||'Project') + '</div>'];
+		var h = ['<div class="tia-sb-proj">' + ico('project') + esc(proj.project||'Project') + '</div>'];
 		(proj.plcs||[]).forEach(function(plc){
 			var plcOpen = (active.indexOf(plc.name+'/')===0) ? ' open' : '';
-			h.push('<details'+plcOpen+'><summary>🔧 ' + esc(plc.name) + '</summary>');
+			h.push('<details'+plcOpen+'><summary>' + ico('plc') + esc(plc.name) + '</summary>');
 			var blocks = (plc.blocks||[]).slice().sort(function(a,b){return (a.number||0)-(b.number||0);});
 			if(blocks.length){
-				h.push('<div class="tia-sb-group">Program blocks</div>');
-				blocks.forEach(function(b){ var p=plc.name+'/Blocks/'+b.name+'.xml'; h.push('<a class="tia-sb-node tia-sb-leaf'+(p===active?' tia-active':'')+'" href="'+fileUrl(plc.name,'Blocks',b.name+'.xml')+'"><span class="tia-sb-badge tia-b-'+bc(b.type)+'">'+esc(shortType(b.type))+'</span>'+esc(b.name)+(b.number!=null?'<span class="tia-sb-num">#'+esc(b.number)+'</span>':'')+'</a>'); });
+				h.push('<div class="tia-sb-group">' + ico('folder') + 'Program blocks</div>');
+				blocks.forEach(function(b){ var p=plc.name+'/Blocks/'+b.name+'.xml'; h.push('<a class="tia-sb-node tia-sb-leaf'+(p===active?' tia-active':'')+'" href="'+fileUrl(plc.name,'Blocks',b.name+'.xml')+'">' + blockIcon(b.type) + '<span class="tia-sb-nm">'+esc(b.name)+'</span>'+(b.number!=null?'<span class="tia-sb-num">#'+esc(b.number)+'</span>':'')+'</a>'); });
 			}
 			var types = plc.types||[];
 			if(types.length){
-				h.push('<div class="tia-sb-group">Data types</div>');
-				types.forEach(function(t){ var tn=(typeof t==='string')?t:t.name; var p=plc.name+'/Types/'+tn+'.xml'; h.push('<a class="tia-sb-node tia-sb-leaf'+(p===active?' tia-active':'')+'" href="'+fileUrl(plc.name,'Types',tn+'.xml')+'"><span class="tia-sb-badge tia-b-udt">UDT</span>'+esc(tn)+'</a>'); });
+				h.push('<div class="tia-sb-group">' + ico('folder') + 'Data types</div>');
+				types.forEach(function(t){ var tn=(typeof t==='string')?t:t.name; var p=plc.name+'/Types/'+tn+'.xml'; h.push('<a class="tia-sb-node tia-sb-leaf'+(p===active?' tia-active':'')+'" href="'+fileUrl(plc.name,'Types',tn+'.xml')+'">' + ico('udt','udt') + '<span class="tia-sb-nm">'+esc(tn)+'</span></a>'); });
 			}
 			var tags = plc.tags||[];
-			if(tags.length){ var p=plc.name+'/TagTables/Default tag table.xml'; h.push('<div class="tia-sb-group">Tags</div><a class="tia-sb-node tia-sb-leaf'+(p===active?' tia-active':'')+'" href="'+fileUrl(plc.name,'TagTables','Default tag table.xml')+'"><span class="tia-sb-badge" style="background:#6e7681">TAG</span>Default tag table</a>'); }
+			if(tags.length){ var p=plc.name+'/TagTables/Default tag table.xml'; h.push('<div class="tia-sb-group">' + ico('folder') + 'Tags</div><a class="tia-sb-node tia-sb-leaf'+(p===active?' tia-active':'')+'" href="'+fileUrl(plc.name,'TagTables','Default tag table.xml')+'">' + ico('tag') + '<span class="tia-sb-nm">Default tag table</span></a>'); }
 			h.push('</details>');
 		});
 		(proj.hmi||[]).forEach(function(hmi){
 			var hmiOpen = (active.indexOf(hmi.name+'/')===0) ? ' open' : '';
-			h.push('<details'+hmiOpen+'><summary>🖥 ' + esc(hmi.name) + '</summary>');
+			h.push('<details'+hmiOpen+'><summary>' + ico('hmi') + esc(hmi.name) + '</summary>');
 			var scr = hmi.screens||[];
 			if(scr.length){
-				h.push('<div class="tia-sb-group">Screens</div>');
-				scr.forEach(function(s){ var sn=(typeof s==='string')?s:s.name; var p=hmi.name+'/Screens/'+sn+'.xml'; h.push('<a class="tia-sb-node tia-sb-leaf'+(p===active?' tia-active':'')+'" href="'+fileUrl(hmi.name,'Screens',sn+'.xml')+'"><span class="tia-sb-badge tia-b-scr">SCR</span>'+esc(sn)+'</a>'); });
+				h.push('<div class="tia-sb-group">' + ico('folder') + 'Screens</div>');
+				scr.forEach(function(s){ var sn=(typeof s==='string')?s:s.name; var p=hmi.name+'/Screens/'+sn+'.xml'; h.push('<a class="tia-sb-node tia-sb-leaf'+(p===active?' tia-active':'')+'" href="'+fileUrl(hmi.name,'Screens',sn+'.xml')+'">' + ico('screen','scr') + '<span class="tia-sb-nm">'+esc(sn)+'</span></a>'); });
 			}
 			h.push('</details>');
 		});
@@ -573,5 +606,6 @@
 		}).catch(function(){});
 	};
 	window.__tiaGetProject.then(function(proj){ if (proj) window.__tiaSetupContentView(); });
+	tiaCleanBreadcrumb();
 })();
 </script>
