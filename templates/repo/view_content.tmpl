@@ -128,6 +128,93 @@
 {{else}}{{/* IsViewDirectory */}}
 	{{if $isTreePathRoot}}
 		{{template "repo/code/upstream_diverging_info" .}}
+		{{/* TIA Spike 2: if a project.json manifest exists at the repo root, replace
+		the plain file list with a TIA-project navigator (PLCs/blocks/types/tags,
+		HMI/screens). Clicking a block navigates to its native .xml, which the
+		tia-ladder frontend renderer turns into a ladder diagram. Falls back to the
+		normal file list when project.json is absent (fetch 404). */}}
+		<div id="tia-project-view" class="tw-hidden" data-repo-link="{{.RepoLink}}" data-ref="{{.RefTypeNameSubURL}}"></div>
+		<style>
+		#tia-project-view{margin:12px 0;font-family:var(--fonts-regular,Segoe UI,Roboto,sans-serif);color:var(--color-text)}
+		.tia-proj-head{display:flex;align-items:baseline;gap:14px;padding:10px 14px;margin-bottom:14px;background:var(--color-box-body);border:1px solid var(--color-secondary);border-radius:8px}
+		.tia-proj-title{font-size:20px;font-weight:700}
+		.tia-proj-gen{font-size:12px;color:var(--color-text-light-2)}
+		.tia-plc{margin-bottom:18px;background:var(--color-box-body);border:1px solid var(--color-secondary);border-radius:8px;overflow:hidden}
+		.tia-plc>h3{margin:0;padding:8px 14px;font-size:15px;background:var(--color-secondary-alpha-30);border-bottom:1px solid var(--color-secondary);display:flex;align-items:center;gap:8px}
+		.tia-plc>h3:before{content:"";display:inline-block;width:10px;height:10px;background:#5b8;clip-path:polygon(0 0,55% 0,100% 50%,55% 100%,0 100%,45% 50%)}
+		.tia-grp{padding:6px 14px 10px}
+		.tia-grp:not(:last-child){border-bottom:1px solid var(--color-secondary-alpha-40)}
+		.tia-grp-h{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--color-text-light-2);margin:6px 0 6px}
+		.tia-cnt{background:var(--color-secondary-alpha-50);border-radius:10px;padding:0 8px;font-size:11px}
+		.tia-list{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:4px}
+		.tia-list li{margin:0}
+		.tia-list a{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:6px;text-decoration:none;color:var(--color-text)}
+		.tia-list a:hover{background:var(--color-secondary-alpha-40)}
+		.tia-badge{display:inline-block;min-width:34px;text-align:center;font-size:10px;font-weight:700;padding:2px 5px;border-radius:4px;color:#fff;background:#888;letter-spacing:.03em}
+		.tia-b-fc{background:#1f6feb}.tia-b-fb{background:#8957e5}.tia-b-db{background:#db6d28}.tia-b-ob{background:#238636}.tia-b-udt{background:#6e7681}.tia-b-scr{background:#d6399b}
+		.tia-nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+		.tia-num{font-size:11px;color:var(--color-text-light-2);font-variant-numeric:tabular-nums}
+		.tia-tagtable{display:inline-block;padding:4px 10px;border-radius:6px;background:var(--color-secondary-alpha-30);text-decoration:none;color:var(--color-text);font-size:13px}
+		.tia-tagtable:hover{background:var(--color-secondary-alpha-50)}
+		</style>
+		<script nonce="{{ctx.CspScriptNonce}}">
+		(function(){
+			var mount = document.getElementById('tia-project-view');
+			if (!mount) return;
+			var repoLink = mount.getAttribute('data-repo-link');
+			var ref = mount.getAttribute('data-ref');
+			var esc = function(s){ return String(s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); };
+			var seg = function(s){ return encodeURIComponent(String(s)); };
+			var fileUrl = function(){ var p = Array.prototype.slice.call(arguments); return repoLink + '/src/' + ref + '/' + p.map(seg).join('/'); };
+			fetch(repoLink + '/raw/' + ref + '/project.json', {headers:{'Accept':'application/json'}})
+				.then(function(r){ if(!r.ok) return null; return r.json(); })
+				.then(function(proj){
+					if(!proj){ return; }
+					var table = document.getElementById('repo-files-table');
+					if(table){ table.style.display = 'none'; }
+					mount.classList.remove('tw-hidden');
+					var h = [];
+					h.push('<div class="tia-proj-head"><span class="tia-proj-title">' + esc(proj.project || 'TIA Project') + '</span>');
+					if(proj.generated){ h.push('<span class="tia-proj-gen">generated ' + esc(String(proj.generated).replace('T',' ').replace(/\.\d+.*$/,'')) + '</span>'); }
+					h.push('</div>');
+					(proj.plcs || []).forEach(function(plc){
+						h.push('<section class="tia-plc"><h3>' + esc(plc.name) + '</h3>');
+						var blocks = (plc.blocks || []).slice().sort(function(a,b){ return (a.number||0)-(b.number||0) || String(a.name).localeCompare(String(b.name)); });
+						if(blocks.length){
+							h.push('<div class="tia-grp"><div class="tia-grp-h">Program blocks <span class="tia-cnt">' + blocks.length + '</span></div><ul class="tia-list">');
+							blocks.forEach(function(b){
+								var ty = String(b.type||'').toUpperCase();
+								var bc = ty.indexOf('FB')>=0?'fb':ty.indexOf('FC')>=0?'fc':ty.indexOf('DB')>=0?'db':ty.indexOf('OB')>=0?'ob':'';
+								h.push('<li><a href="' + fileUrl(plc.name,'Blocks',b.name+'.xml') + '"><span class="tia-badge tia-b-' + bc + '">' + esc(b.type||'') + '</span><span class="tia-nm">' + esc(b.name) + '</span>' + (b.number!=null?'<span class="tia-num">#' + esc(b.number) + '</span>':'') + '</a></li>');
+							});
+							h.push('</ul></div>');
+						}
+						var types = plc.types || [];
+						if(types.length){
+							h.push('<div class="tia-grp"><div class="tia-grp-h">Data types <span class="tia-cnt">' + types.length + '</span></div><ul class="tia-list">');
+							types.forEach(function(t){ var tn = (typeof t==='string')?t:t.name; h.push('<li><a href="' + fileUrl(plc.name,'Types',tn+'.xml') + '"><span class="tia-badge tia-b-udt">UDT</span><span class="tia-nm">' + esc(tn) + '</span></a></li>'); });
+							h.push('</ul></div>');
+						}
+						var tags = plc.tags || [];
+						if(tags.length){
+							h.push('<div class="tia-grp"><div class="tia-grp-h">Tags <span class="tia-cnt">' + tags.length + '</span></div><a class="tia-tagtable" href="' + fileUrl(plc.name,'TagTables','Default tag table.xml') + '">Default tag table</a></div>');
+						}
+						h.push('</section>');
+					});
+					(proj.hmi || []).forEach(function(hmi){
+						h.push('<section class="tia-plc"><h3>' + esc(hmi.name) + '</h3>');
+						var scr = hmi.screens || [];
+						if(scr.length){
+							h.push('<div class="tia-grp"><div class="tia-grp-h">Screens <span class="tia-cnt">' + scr.length + '</span></div><ul class="tia-list">');
+							scr.forEach(function(s){ var sn = (typeof s==='string')?s:s.name; h.push('<li><a href="' + fileUrl(hmi.name,'Screens',sn+'.xml') + '"><span class="tia-badge tia-b-scr">SCR</span><span class="tia-nm">' + esc(sn) + '</span></a></li>'); });
+							h.push('</ul></div>');
+						}
+						h.push('</section>');
+					});
+					mount.innerHTML = h.join('');
+				}).catch(function(){ /* not a TIA repo or fetch error: leave normal file list */ });
+		})();
+		</script>
 	{{end}}
 	{{template "repo/view_list" .}}
 	{{if and .ReadmeExist (or .RenderAsMarkup .IsPlainText)}}
