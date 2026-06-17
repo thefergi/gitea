@@ -9,6 +9,7 @@ const frontendPlugins: Record<string, LazyLoadFunc> = {
   'viewer-3d': () => import('./render/plugins/frontend-viewer-3d.ts'),
   'openapi-swagger': () => import('./render/plugins/frontend-openapi-swagger.ts'),
   'asciicast': () => import('./render/plugins/frontend-asciicast.ts'),
+  'tia-ladder': () => import('./render/plugins/frontend-tia.ts'),
 };
 
 class Options implements FrontendRenderOptions {

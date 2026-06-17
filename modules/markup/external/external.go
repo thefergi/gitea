@@ -53,6 +53,11 @@ func RegisterRenderers() {
 		patterns: []string{"*.cast"},
 	})
 
+	markup.RegisterRenderer(&frontendRenderer{
+		name:     "tia-ladder",
+		patterns: []string{"*.xml"},
+	})
+
 	for _, renderer := range setting.ExternalMarkupRenderers {
 		markup.RegisterRenderer(&Renderer{renderer})
 	}
