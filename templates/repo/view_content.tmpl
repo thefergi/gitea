@@ -240,6 +240,8 @@
 .tia-table .tia-addr{font-family:ui-monospace,Consolas,monospace;color:var(--color-text-light-2);white-space:nowrap}
 .tia-table .tia-dtype{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;background:#1f6feb22;color:#1f6feb}
 .tia-table .tia-cmt{color:var(--color-text-light-2)}
+.tia-src{font-family:ui-monospace,Consolas,"Cascadia Code",monospace;font-size:12.5px;line-height:1.55;background:var(--color-code-bg,#f6f8fa);border:1px solid var(--color-secondary);border-radius:6px;padding:10px 14px;overflow:auto;white-space:pre;max-height:72vh;color:var(--color-code-text,#1f2328)}
+.tia-kw{color:#cf222e;font-weight:600}.tia-cm{color:#6e7781;font-style:italic}.tia-str{color:#0a3069}
 </style>
 <script nonce="{{ctx.CspScriptNonce}}">
 (function(){
@@ -584,27 +586,72 @@
 		var parts = location.pathname.split('/src/')[1]; if (!parts) return;
 		var seg = parts.split('/'); var fpath = seg.slice(2).join('/');
 		var kind = fpath.indexOf('/TagTables/') >= 0 ? 'tags' : (fpath.indexOf('/Types/') >= 0 ? 'type' : '');
-		if (!kind) return;
-		var ownerRepo = location.pathname.split('/src/')[0];
-		var ref = seg[1];
-		fetch(ownerRepo + '/raw/' + encodeURIComponent(ref) + '/' + fpath).then(function(r){ return r.text(); }).then(function(xml){
-			var content = document.querySelector('.repo-view-content'); if (!content) return;
-			if (content.querySelector('#tia-content-panel')) return;
-			var v = renderIframe(); if (v) v.style.display = 'none'; // hide "Failed to render"
-			var panel = document.createElement('div'); panel.id = 'tia-content-panel';
-			panel.className = 'tia-content';
-			if (kind === 'tags'){
-				var tags = parseTagTable(xml);
-				var rows = tags.map(function(t){ return '<tr><td class="tia-nm">' + esc(t.name) + '</td><td><span class="tia-dtype">' + esc(t.dataType) + '</span></td><td class="tia-addr">' + esc(t.address) + '</td><td class="tia-cmt">' + esc(t.comment) + '</td></tr>'; }).join('');
-				panel.innerHTML = '<div class="tia-cp-head">🏷 Tag table — <b>' + tags.length + '</b> tags</div><table class="tia-table"><thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Comment</th></tr></thead><tbody>' + rows + '</tbody></table>';
+		var blkMatch = fpath.match(/\/Blocks\/([^\/]+)\.xml$/);
+		if (!kind && !blkMatch) return;
+		window.__tiaGetProject.then(function(proj){
+			if (!proj) return;
+			if (blkMatch){
+				// Block view: render from project.json. LAD/FBD/GRAPH -> leave to the ladder
+				// renderer; SCL/STL -> source text; DB -> interface table.
+				var name = decodeURIComponent(blkMatch[1]);
+				var blk = null;
+				(proj.plcs || []).forEach(function(p){ (p.blocks || []).forEach(function(b){ if (b.name === name && !blk) blk = b; }); });
+				if (!blk) return;
+				var lang = String(blk.language || '').toUpperCase();
+				if (lang === 'LAD' || lang === 'FBD' || lang === 'GRAPH' || lang === 'CFC') return;
+				renderBlockPanel(blk, lang);
 			} else {
-				var dt = parseDataType(xml);
-				var rows2 = dt.members.map(function(m){ return '<tr><td class="tia-nm">' + esc(m.name) + '</td><td><span class="tia-dtype">' + esc(m.datatype) + '</span></td><td class="tia-cmt">' + esc(m.comment) + '</td></tr>'; }).join('');
-				panel.innerHTML = '<div class="tia-cp-head">🧩 Data type — <b>' + esc(dt.name || '?') + '</b> (' + dt.members.length + ' members)</div><table class="tia-table"><thead><tr><th>Member</th><th>Datatype</th><th>Comment</th></tr></thead><tbody>' + rows2 + '</tbody></table>';
+				var ownerRepo = location.pathname.split('/src/')[0];
+				var ref = seg[1];
+				fetch(ownerRepo + '/raw/' + encodeURIComponent(ref) + '/' + fpath).then(function(r){ return r.text(); }).then(function(xml){
+					var content = document.querySelector('.repo-view-content'); if (!content || content.querySelector('#tia-content-panel')) return;
+					var v = renderIframe(); if (v) v.style.display = 'none';
+					var panel = document.createElement('div'); panel.id = 'tia-content-panel'; panel.className = 'tia-content';
+					if (kind === 'tags'){
+						var tags = parseTagTable(xml);
+						var rows = tags.map(function(t){ return '<tr><td class="tia-nm">' + esc(t.name) + '</td><td><span class="tia-dtype">' + esc(t.dataType) + '</span></td><td class="tia-addr">' + esc(t.address) + '</td><td class="tia-cmt">' + esc(t.comment) + '</td></tr>'; }).join('');
+						panel.innerHTML = '<div class="tia-cp-head">🏷 Tag table — <b>' + tags.length + '</b> tags</div><table class="tia-table"><thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Comment</th></tr></thead><tbody>' + rows + '</tbody></table>';
+					} else {
+						var dt = parseDataType(xml);
+						var rows2 = dt.members.map(function(m){ return '<tr><td class="tia-nm">' + esc(m.name) + '</td><td><span class="tia-dtype">' + esc(m.datatype) + '</span></td><td class="tia-cmt">' + esc(m.comment) + '</td></tr>'; }).join('');
+						panel.innerHTML = '<div class="tia-cp-head">🧩 Data type — <b>' + esc(dt.name || '?') + '</b> (' + dt.members.length + ' members)</div><table class="tia-table"><thead><tr><th>Member</th><th>Datatype</th><th>Comment</th></tr></thead><tbody>' + rows2 + '</tbody></table>';
+					}
+					content.insertBefore(panel, content.firstChild);
+				}).catch(function(){});
 			}
-			content.insertBefore(panel, content.firstChild);
-		}).catch(function(){});
+		});
 	};
+	function tiaHighlight(src){
+		var s = esc(src);
+		s = s.replace(/(\/\/[^\n]*)/g, '<span class="tia-cm">$1</span>');
+		s = s.replace(/('[^']*')/g, '<span class="tia-str">$1</span>');
+		s = s.replace(/\b(FUNCTION_BLOCK|END_FUNCTION_BLOCK|FUNCTION|END_FUNCTION|ORGANIZATION_BLOCK|END_ORGANIZATION_BLOCK|DATA_BLOCK|END_DATA_BLOCK|VAR_INPUT|VAR_OUTPUT|VAR_IN_OUT|VAR_TEMP|VAR_CONSTANT|VAR_STAT|VAR|END_VAR|CONSTANT|RETAIN|BEGIN|END_BEGIN|IF|ELSIF|ELSE|END_IF|THEN|FOR|TO|BY|DO|WHILE|END_FOR|END_WHILE|REPEAT|UNTIL|CASE|OF|END_CASE|RETURN|EXIT|CONTINUE|TRUE|FALSE|AND|OR|NOT|XOR|MOD|REGION|END_REGION|AT|GOTO)\b/g, '<span class="tia-kw">$1</span>');
+		return s;
+	}
+	function renderBlockPanel(blk, lang){
+		var content = document.querySelector('.repo-view-content'); if (!content || content.querySelector('#tia-content-panel')) return;
+		var v = renderIframe(); if (v) v.style.display = 'none';
+		var panel = document.createElement('div'); panel.id = 'tia-content-panel'; panel.className = 'tia-content';
+		var html = '<div class="tia-cp-head">📜 <b>' + esc(blk.name) + '</b> — ' + esc(blk.type || 'block') + (blk.number != null ? ' #' + esc(blk.number) : '') + ' <span class="tia-dtype">' + esc(blk.language || lang) + '</span></div>';
+		if (blk.source && (lang === 'SCL' || lang === 'STL' || lang === 'SCL_STL')){
+			html += '<pre class="tia-src">' + tiaHighlight(blk.source) + '</pre>';
+		}
+		if (blk.interface && blk.interface.length && !(lang === 'SCL' || lang === 'STL' || lang === 'SCL_STL')){
+			blk.interface.forEach(function(sec){
+				var members = sec.members || [];
+				if (!members.length) return;
+				html += '<div class="tia-cp-head" style="margin-top:12px">' + esc(sec.name || 'Section') + ' <b>(' + members.length + ')</b></div>';
+				html += '<table class="tia-table"><thead><tr><th>Member</th><th>Datatype</th><th>Comment</th></tr></thead><tbody>';
+				members.forEach(function(m){ html += '<tr><td class="tia-nm">' + esc(m.name || '') + '</td><td><span class="tia-dtype">' + esc(m.dataType || m.datatype || '') + '</span></td><td class="tia-cmt">' + esc(m.comment || '') + '</td></tr>'; });
+				html += '</tbody></table>';
+			});
+		}
+		if (blk.source && !(lang === 'SCL' || lang === 'STL' || lang === 'SCL_STL')){
+			html += '<pre class="tia-src">' + tiaHighlight(blk.source) + '</pre>';
+		}
+		panel.innerHTML = html;
+		content.insertBefore(panel, content.firstChild);
+	}
 	window.__tiaGetProject.then(function(proj){ if (proj) window.__tiaSetupContentView(); });
 	tiaCleanBreadcrumb();
 })();
