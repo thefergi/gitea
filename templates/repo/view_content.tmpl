@@ -242,6 +242,35 @@
 .tia-table .tia-cmt{color:var(--color-text-light-2)}
 .tia-src{font-family:ui-monospace,Consolas,"Cascadia Code",monospace;font-size:12.5px;line-height:1.55;background:var(--color-code-bg,#f6f8fa);border:1px solid var(--color-secondary);border-radius:6px;padding:10px 14px;overflow:auto;white-space:pre;max-height:72vh;color:var(--color-code-text,#1f2328)}
 .tia-kw{color:#cf222e;font-weight:600}.tia-cm{color:#6e7781;font-style:italic}.tia-str{color:#0a3069}
+/* Archive-backed SPA (repo = only a .zap18 in main) */
+#tia-spa{display:flex;border:1px solid var(--color-secondary);border-radius:8px;overflow:hidden;background:var(--color-box-body);margin:12px 0;font-family:var(--fonts-regular,Segoe UI,Roboto,sans-serif);min-height:62vh}
+#tia-spa-nav{width:280px;flex:0 0 280px;border-right:1px solid var(--color-secondary);overflow:auto;max-height:80vh;font-size:13px;padding:4px 0 12px}
+#tia-spa-main{flex:1;padding:14px 18px;overflow:auto;max-height:80vh}
+.tia-spa-empty{color:var(--color-text-light-2);padding:24px;display:flex;align-items:center;gap:8px}
+#tia-spa-nav .tia-sb-proj{font-weight:700;padding:4px 10px 8px;border-bottom:1px solid var(--color-secondary-alpha-40);margin-bottom:4px;display:flex;align-items:center;gap:6px}
+#tia-spa-nav .tia-sb-node{padding:3px 10px 3px 6px;border-radius:5px;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--color-text);text-decoration:none}
+#tia-spa-nav .tia-sb-node:hover{background:var(--color-secondary-alpha-40)}
+#tia-spa-nav .tia-sb-node.tia-active{background:var(--color-primary-alpha-30);font-weight:600;box-shadow:inset 2px 0 0 var(--color-primary)}
+#tia-spa-nav .tia-sb-leaf{padding-left:24px}
+#tia-spa-nav .tia-sb-group{padding-left:16px;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--color-text-light-2);margin-top:6px;display:flex;align-items:center;gap:5px}
+#tia-spa-nav .tia-sb-nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#tia-spa-nav .tia-sb-num{font-size:10px;color:var(--color-text-light-2);margin-left:auto;padding-left:6px}
+#tia-spa-nav details>summary{list-style:none;cursor:pointer;padding:5px 10px;display:flex;align-items:center;gap:5px;font-weight:600}
+#tia-spa-nav details>summary::-webkit-details-marker{display:none}
+#tia-spa-nav details>summary:before{content:"▸";color:var(--color-text-light-2);font-size:10px;display:inline-block;transition:transform .1s}
+#tia-spa-nav details[open]>summary:before{transform:rotate(90deg)}
+/* ladder rendering inside the SPA main pane */
+#tia-spa-main .tia-ladder{font-family:ui-monospace,Consolas,monospace;font-size:13px;line-height:1.6}
+#tia-spa-main .tia-net-label{font-weight:bold;margin:10px 0 2px;color:var(--color-text)}
+#tia-spa-main .tia-rung{display:flex;align-items:center;flex-wrap:wrap}
+#tia-spa-main .tia-rail{color:#888;padding:0 3px}#tia-spa-main .tia-wire{color:#888}
+#tia-spa-main .tia-series{display:inline-flex;align-items:center}
+#tia-spa-main .tia-parallel{display:inline-flex;flex-direction:column;border-left:2px solid #888;border-right:2px solid #888;margin:0 4px}
+#tia-spa-main .tia-parallel .tia-series{padding:2px 6px}
+#tia-spa-main .tia-ct{display:inline-flex;align-items:center;border:1px solid #666;border-radius:4px;background:#fff;padding:2px 8px;margin:0 3px}
+#tia-spa-main .tia-bar{color:#999;margin:0 2px}
+#tia-spa-main .tia-coil{border:1px solid #070;color:#050;background:#efe;border-radius:10px;padding:2px 10px;margin-left:8px;font-weight:bold}
+#tia-spa-main .tia-empty{color:var(--color-text-light-2);font-style:italic}
 </style>
 <script nonce="{{ctx.CspScriptNonce}}">
 (function(){
@@ -277,11 +306,23 @@
 		});
 	}
 
-	window.__tiaGetProject = window.__tiaGetProject || fetch(repoLink + '/raw/' + ref + '/project.json', {headers:{'Accept':'application/json'}}).then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
+	// Resolve the data ref: an "archive-backed" repo keeps only the .zap18 in `main`
+	// and the derived tree on a hidden `tia-data` branch. Try tia-data first, then the
+	// current branch (so old single-branch repos still work).
+	window.__tiaDataRef = window.__tiaDataRef || null;
+	window.__tiaGetProject = window.__tiaGetProject || (function(){
+		return fetch(repoLink + '/raw/tia-data/project.json', {headers:{'Accept':'application/json'}})
+			.then(function(r){ if (r.ok){ window.__tiaDataRef = 'tia-data'; return r.json(); } throw new Error('no tia-data'); })
+			.catch(function(){ return fetch(repoLink + '/raw/' + ref + '/project.json', {headers:{'Accept':'application/json'}})
+				.then(function(r){ if (r.ok){ window.__tiaDataRef = ref; return r.json(); } return null; })
+				.catch(function(){ return null; }); });
+	})();
 
-	/* Root navigator */
+	/* Root navigator (only for non-archive-backed repos — old single-branch layout).
+	   Archive-backed repos (data on hidden `tia-data` branch) get the SPA below. */
 	window.__tiaGetProject.then(function(proj){
 		if(!proj) return;
+		if (window.__tiaDataRef === 'tia-data') { tiaStartSpa(proj); return; }
 		var mount = document.getElementById('tia-project-view');
 		if(!mount) return;
 		var table = document.getElementById('repo-files-table');
@@ -653,6 +694,100 @@
 		content.insertBefore(panel, content.firstChild);
 	}
 	window.__tiaGetProject.then(function(proj){ if (proj) window.__tiaSetupContentView(); });
+
+	/* === Archive-backed SPA (repo = only a .zap18 in main; data on tia-data) === */
+	function tiaEncPath(p){ return p.split('/').map(encodeURIComponent).join('/'); }
+	function tiaFetchRaw(path){ return fetch(repoLink + '/raw/' + encodeURIComponent(window.__tiaDataRef || 'tia-data') + '/' + tiaEncPath(path)).then(function(r){ return r.text(); }); }
+	function tiaFindBlock(proj, name){ var r = null; (proj.plcs || []).forEach(function(p){ (p.blocks || []).forEach(function(b){ if (b.name === name && !r) r = b; }); }); return r; }
+
+	function tiaStartSpa(proj){
+		window.__tiaProj = proj;
+		var table = document.getElementById('repo-files-table'); if (table) table.style.display = 'none';
+		var fs = document.querySelector('.repo-file-search-container'); if (fs) fs.style.display = 'none';
+		var cp = document.querySelector('.repo-button-row .repo-clone-panel'); if (cp) cp.parentElement.style.display = 'none';
+		var host = document.querySelector('.repo-home-filelist') || document.querySelector('.repo-view-content') || document.querySelector('.ui.container');
+		var old = document.getElementById('tia-spa'); if (old) old.remove();
+		var spa = document.createElement('div'); spa.id = 'tia-spa';
+		spa.innerHTML = '<div id="tia-spa-nav">' + tiaSpaNav(proj) + '</div><div id="tia-spa-main"><div class="tia-spa-empty">' + ico('project') + ' Select a block, tag table, or data type on the left.</div></div>';
+		host.appendChild(spa);
+		spa.addEventListener('click', function(e){
+			var n = e.target.closest('[data-tia]'); if (!n) return;
+			e.preventDefault();
+			var cur = spa.querySelector('.tia-active'); if (cur) cur.classList.remove('tia-active');
+			n.classList.add('tia-active');
+			tiaShow(n.getAttribute('data-tia'), n.getAttribute('data-path'), n.getAttribute('data-name'));
+		});
+	}
+
+	function tiaSpaNav(proj){
+		var h = ['<div class="tia-sb-proj">' + ico('project') + esc(proj.project || 'Project') + '</div>'];
+		(proj.plcs || []).forEach(function(plc){
+			h.push('<details open><summary>' + ico('plc') + esc(plc.name) + '</summary>');
+			var blocks = (plc.blocks || []).slice().sort(function(a,b){ return (a.number||0)-(b.number||0); });
+			if (blocks.length){
+				h.push('<div class="tia-sb-group">' + ico('folder') + 'Program blocks</div>');
+				blocks.forEach(function(b){ h.push(node('block', plc.name+'/Blocks/'+b.name+'.xml', b.name, blockIcon(b.type) + '<span class="tia-sb-nm">'+esc(b.name)+'</span>'+(b.number!=null?'<span class="tia-sb-num">#'+esc(b.number)+'</span>':''))); });
+			}
+			var types = plc.types || [];
+			if (types.length){ h.push('<div class="tia-sb-group">' + ico('folder') + 'Data types</div>'); types.forEach(function(t){ var tn=(typeof t==='string')?t:t.name; h.push(node('type', plc.name+'/Types/'+tn+'.xml', tn, ico('udt','udt')+'<span class="tia-sb-nm">'+esc(tn)+'</span>')); }); }
+			var tags = plc.tags || [];
+			if (tags.length){ h.push('<div class="tia-sb-group">' + ico('folder') + 'Tags</div>'); h.push(node('tags', plc.name+'/TagTables/Default tag table.xml', '', ico('tag')+'<span class="tia-sb-nm">Default tag table</span>')); }
+			h.push('</details>');
+		});
+		(proj.hmi || []).forEach(function(hmi){
+			h.push('<details><summary>' + ico('hmi') + esc(hmi.name) + '</summary>');
+			var scr = hmi.screens || [];
+			if (scr.length){ h.push('<div class="tia-sb-group">' + ico('folder') + 'Screens</div>'); scr.forEach(function(s){ var sn=(typeof s==='string')?s:s.name; h.push(node('screen', hmi.name+'/Screens/'+sn+'.xml', sn, ico('screen','scr')+'<span class="tia-sb-nm">'+esc(sn)+'</span>')); }); }
+			h.push('</details>');
+		});
+		return h.join('');
+		function node(kind, path, name, inner){ return '<a class="tia-sb-node tia-sb-leaf" href="#" data-tia="'+kind+'" data-path="'+esc(path)+'" data-name="'+esc(name)+'">'+inner+'</a>'; }
+	}
+
+	function tiaShow(kind, path, name){
+		var main = document.getElementById('tia-spa-main'); if (!main) return;
+		main.innerHTML = '<div class="tia-spa-empty">Loading…</div>';
+		var proj = window.__tiaProj;
+		if (kind === 'block'){
+			var blk = tiaFindBlock(proj, name);
+			var lang = String((blk && blk.language) || '').toUpperCase();
+			if (blk && (lang === 'SCL' || lang === 'STL' || lang === 'DB' || /DB/i.test(blk.type||''))){ main.innerHTML = tiaBlockHtml(blk, lang); return; }
+			tiaFetchRaw(path).then(function(xml){ main.innerHTML = tiaLadderHtml(name, parseBlock(xml)); }).catch(function(e){ main.innerHTML = '<div class="tia-spa-empty">Failed: '+esc(e.message||e)+'</div>'; });
+			return;
+		}
+		if (kind === 'tags'){ tiaFetchRaw(path).then(function(xml){ main.innerHTML = tiaTagsHtml(parseTagTable(xml)); }); return; }
+		if (kind === 'type'){ tiaFetchRaw(path).then(function(xml){ main.innerHTML = tiaTypeHtml(parseDataType(xml)); }); return; }
+		if (kind === 'screen'){ main.innerHTML = '<div class="tia-spa-empty">'+ico('screen','scr')+' HMI screen rendering is not implemented yet.</div>'; return; }
+	}
+
+	function tiaLadderHtml(name, rungs){
+		var h = ['<div class="tia-cp-head">🔧 <b>'+esc(name)+'</b> — ladder ('+rungs.length+' networks)</div><div class="tia-ladder">'];
+		rungs.forEach(function(r, i){ h.push('<div class="tia-net-label">Network '+(i+1)+'</div><div class="tia-rung">'+renderRung(r.rung)+'</div>'); });
+		h.push('</div>'); return h.join('');
+	}
+	function tiaBlockHtml(blk, lang){
+		var h = ['<div class="tia-cp-head">📜 <b>'+esc(blk.name)+'</b> — '+esc(blk.type||'')+(blk.number!=null?' #'+esc(blk.number):'')+' <span class="tia-dtype">'+esc(blk.language||lang)+'</span></div>'];
+		if (blk.source && (lang === 'SCL' || lang === 'STL')) h.push('<pre class="tia-src">'+tiaHighlight(blk.source)+'</pre>');
+		if (blk.interface && blk.interface.length){
+			blk.interface.forEach(function(sec){ var ms = sec.members || []; if (!ms.length) return;
+				h.push('<div class="tia-cp-head" style="margin-top:12px">'+esc(sec.name||'Section')+' <b>('+ms.length+')</b></div><table class="tia-table"><thead><tr><th>Member</th><th>Datatype</th><th>Comment</th></tr></thead><tbody>');
+				ms.forEach(function(m){ h.push('<tr><td class="tia-nm">'+esc(m.name||'')+'</td><td><span class="tia-dtype">'+esc(m.dataType||m.datatype||'')+'</span></td><td class="tia-cmt">'+esc(m.comment||'')+'</td></tr>'); });
+				h.push('</tbody></table>');
+			});
+		}
+		return h.join('');
+	}
+	function tiaTagsHtml(tags){
+		var h = ['<div class="tia-cp-head">🏷 Tag table — <b>'+tags.length+'</b> tags</div><table class="tia-table"><thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Comment</th></tr></thead><tbody>'];
+		tags.forEach(function(t){ h.push('<tr><td class="tia-nm">'+esc(t.name)+'</td><td><span class="tia-dtype">'+esc(t.dataType)+'</span></td><td class="tia-addr">'+esc(t.address)+'</td><td class="tia-cmt">'+esc(t.comment)+'</td></tr>'); });
+		h.push('</tbody></table>'); return h.join('');
+	}
+	function tiaTypeHtml(dt){
+		var h = ['<div class="tia-cp-head">🧩 Data type — <b>'+esc(dt.name||'?')+'</b> ('+dt.members.length+' members)</div><table class="tia-table"><thead><tr><th>Member</th><th>Datatype</th><th>Comment</th></tr></thead><tbody>'];
+		dt.members.forEach(function(m){ h.push('<tr><td class="tia-nm">'+esc(m.name)+'</td><td><span class="tia-dtype">'+esc(m.datatype)+'</span></td><td class="tia-cmt">'+esc(m.comment)+'</td></tr>'); });
+		h.push('</tbody></table>'); return h.join('');
+	}
+
 	tiaCleanBreadcrumb();
 })();
 </script>
