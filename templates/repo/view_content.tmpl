@@ -208,6 +208,18 @@
 #tia-diff-panel .tia-bar{color:#999;margin:0 2px}
 #tia-diff-panel .tia-coil{border:1px solid #070;color:#050;background:#efe;border-radius:10px;padding:2px 10px;margin-left:8px;font-weight:bold}
 #tia-diff-panel .tia-empty{color:var(--color-text-light-2);font-style:italic}
+/* Stage C: tag table / data type content */
+.tia-content{font-family:var(--fonts-regular,Segoe UI,Roboto,sans-serif);font-size:13px;color:var(--color-text);margin:8px 0 14px;border:1px solid var(--color-secondary);border-radius:8px;background:var(--color-box-body);padding:10px 12px}
+.tia-cp-head{font-size:14px;margin-bottom:8px;color:var(--color-text-light-2)}
+.tia-cp-head b{color:var(--color-text)}
+.tia-table{width:100%;border-collapse:collapse}
+.tia-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--color-text-light-2);padding:5px 10px;border-bottom:1px solid var(--color-secondary);background:var(--color-secondary-alpha-20)}
+.tia-table td{padding:4px 10px;border-bottom:1px solid var(--color-secondary-alpha-40);vertical-align:top}
+.tia-table tr:hover td{background:var(--color-secondary-alpha-20)}
+.tia-table .tia-nm{font-family:ui-monospace,Consolas,monospace;font-weight:600;white-space:nowrap}
+.tia-table .tia-addr{font-family:ui-monospace,Consolas,monospace;color:var(--color-text-light-2);white-space:nowrap}
+.tia-table .tia-dtype{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:4px;background:#1f6feb22;color:#1f6feb}
+.tia-table .tia-cmt{color:var(--color-text-light-2)}
 </style>
 <script nonce="{{ctx.CspScriptNonce}}">
 (function(){
@@ -495,5 +507,54 @@
 	}
 	/* wire the Compare button once project.json is confirmed (TIA repo) */
 	window.__tiaGetProject.then(function(proj){ if (proj) window.__tiaSetupDiff(); });
+
+	/* Stage C: render tag tables + data types as structured content (not raw XML).
+	   These files aren't SW.Blocks.* so the tia-ladder renderer returns false and
+	   Gitea shows "Failed to render" — we replace that with a real table / struct. */
+	function firstNonEmptyText(el, local){ var ts = el.getElementsByTagName(local || 'Text'); for (var i = 0; i < ts.length; i++){ var t = (ts[i].textContent || '').trim(); if (t) return t; } return ''; }
+	function parseTagTable(xml){
+		var doc = new DOMParser().parseFromString(xml, 'text/xml'), out = [], all = doc.getElementsByTagName('*');
+		for (var i = 0; i < all.length; i++){
+			var tn = all[i].tagName;
+			if (tn !== 'SW.Tags.PlcTag' && tn !== 'SW.Tags.ConstantTag') continue;
+			var el = all[i];
+			out.push({ name: firstNonEmptyText(el, 'Name') || '?', dataType: firstNonEmptyText(el, 'DataTypeName') || '', address: firstNonEmptyText(el, 'LogicalAddress') || '', comment: firstNonEmptyText(el, 'Text') });
+		}
+		return out;
+	}
+	function parseDataType(xml){
+		var doc = new DOMParser().parseFromString(xml, 'text/xml');
+		var members = [], ms = doc.getElementsByTagName('Member');
+		for (var i = 0; i < ms.length; i++){ members.push({ name: ms[i].getAttribute('Name') || '?', datatype: ms[i].getAttribute('Datatype') || '', comment: firstNonEmptyText(ms[i], 'MultiLanguageText') }); }
+		var name = '', ns = doc.getElementsByTagName('Name');
+		for (var j = 0; j < ns.length; j++){ if (ns[j].parentNode && ln(ns[j].parentNode) === 'AttributeList'){ name = (ns[j].textContent || '').trim(); break; } }
+		return { name: name, members: members };
+	}
+	window.__tiaSetupContentView = function(){
+		var parts = location.pathname.split('/src/')[1]; if (!parts) return;
+		var seg = parts.split('/'); var fpath = seg.slice(2).join('/');
+		var kind = fpath.indexOf('/TagTables/') >= 0 ? 'tags' : (fpath.indexOf('/Types/') >= 0 ? 'type' : '');
+		if (!kind) return;
+		var ownerRepo = location.pathname.split('/src/')[0];
+		var ref = seg[1];
+		fetch(ownerRepo + '/raw/' + encodeURIComponent(ref) + '/' + fpath).then(function(r){ return r.text(); }).then(function(xml){
+			var content = document.querySelector('.repo-view-content'); if (!content) return;
+			if (content.querySelector('#tia-content-panel')) return;
+			var v = renderIframe(); if (v) v.style.display = 'none'; // hide "Failed to render"
+			var panel = document.createElement('div'); panel.id = 'tia-content-panel';
+			panel.className = 'tia-content';
+			if (kind === 'tags'){
+				var tags = parseTagTable(xml);
+				var rows = tags.map(function(t){ return '<tr><td class="tia-nm">' + esc(t.name) + '</td><td><span class="tia-dtype">' + esc(t.dataType) + '</span></td><td class="tia-addr">' + esc(t.address) + '</td><td class="tia-cmt">' + esc(t.comment) + '</td></tr>'; }).join('');
+				panel.innerHTML = '<div class="tia-cp-head">🏷 Tag table — <b>' + tags.length + '</b> tags</div><table class="tia-table"><thead><tr><th>Name</th><th>Type</th><th>Address</th><th>Comment</th></tr></thead><tbody>' + rows + '</tbody></table>';
+			} else {
+				var dt = parseDataType(xml);
+				var rows2 = dt.members.map(function(m){ return '<tr><td class="tia-nm">' + esc(m.name) + '</td><td><span class="tia-dtype">' + esc(m.datatype) + '</span></td><td class="tia-cmt">' + esc(m.comment) + '</td></tr>'; }).join('');
+				panel.innerHTML = '<div class="tia-cp-head">🧩 Data type — <b>' + esc(dt.name || '?') + '</b> (' + dt.members.length + ' members)</div><table class="tia-table"><thead><tr><th>Member</th><th>Datatype</th><th>Comment</th></tr></thead><tbody>' + rows2 + '</tbody></table>';
+			}
+			content.insertBefore(panel, content.firstChild);
+		}).catch(function(){});
+	};
+	window.__tiaGetProject.then(function(proj){ if (proj) window.__tiaSetupContentView(); });
 })();
 </script>
